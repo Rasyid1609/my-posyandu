@@ -1,0 +1,447 @@
+import { Link, useForm } from '@inertiajs/react';
+import MaternalEpisodes from '../../components/MaternalEpisodes';
+import Layout, { usePermission } from '../../components/Layout';
+import { Badge, Button, Errors, Field } from '../../components/ui';
+import { useDraftGuard } from '../../components/useDraftGuard';
+import { localDateTime, statusLabels, type Resident, type Visit } from '../../types';
+
+export default function Form({
+    resident,
+    identityDetails,
+    history,
+    visits,
+    today,
+    households,
+    guardians,
+    episodes,
+}: {
+    resident: Resident | null;
+    identityDetails: {
+        national_id_number: string | null;
+        phone_number: string | null;
+        family_card_number: string | null;
+    } | null;
+    history: { status: string; effective_date: string; reason: string }[];
+    visits: Visit[];
+    today: string;
+    households: { id: number; head_of_household_name: string }[];
+    guardians: { id: number; full_name: string; household_id: number }[];
+    episodes: {
+        id: number;
+        episode_type: string;
+        start_date: string;
+        end_date: string | null;
+        source: string;
+    }[];
+}) {
+    const canManage = usePermission('residents.manage');
+    const initialGuardian = guardians.find(
+        (person) =>
+            person.id === resident?.guardian_id && person.household_id === resident?.household_id,
+    );
+    const form = useForm({
+        full_name: resident?.full_name || '',
+        gender: resident?.gender || 'L',
+        national_id_number: '',
+        phone_number: '',
+        clear_national_id: false,
+        clear_phone: false,
+        birth_date: resident?.birth_date?.slice(0, 10) || '',
+        is_birth_date_estimated: resident?.is_birth_date_estimated || false,
+        household_id: String(resident?.household_id || ''),
+        guardian_id: String(initialGuardian?.id || ''),
+        family_relationship: resident?.family_relationship || '',
+        address: resident?.address || '',
+        rt: resident?.rt || '',
+        rw: resident?.rw || '',
+        residency_status: resident?.residency_status || 'active',
+        effective_date: today,
+        reason: '',
+        revision: resident?.revision || 1,
+    });
+    const familyGuardians = form.data.household_id
+        ? guardians.filter((person) => person.household_id === Number(form.data.household_id))
+        : [];
+    const guardianHint =
+        resident?.guardian_id && !initialGuardian && !form.data.guardian_id
+            ? 'Wali sebelumnya tidak sesuai keluarga. Pilih ulang wali jika diperlukan.'
+            : !form.data.household_id
+              ? 'Pilih keluarga terlebih dahulu.'
+              : !familyGuardians.length
+                ? 'Belum ada anggota keluarga yang dapat dipilih sebagai wali.'
+                : 'Pilihan wali berasal dari anggota keluarga yang dipilih.';
+    useDraftGuard(form.isDirty, form.processing);
+    return (
+        <Layout
+            title={resident ? 'Detail warga' : 'Tambah warga'}
+            description="Simpan identitas sekali. Pengukuran dan pelayanan dicatat melalui Data Sasaran."
+            action={<Link href="/masyarakat">Kembali ke daftar</Link>}
+        >
+            <form
+                className="form-stack"
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    if (
+                        resident &&
+                        form.data.residency_status !== resident.residency_status &&
+                        !window.confirm('Simpan perubahan status warga beserta riwayatnya?')
+                    )
+                        return;
+                    form.transform(
+                        ({
+                            national_id_number,
+                            phone_number,
+                            clear_national_id,
+                            clear_phone,
+                            ...data
+                        }) => ({
+                            ...data,
+                            ...(clear_national_id
+                                ? { national_id_number: null }
+                                : national_id_number
+                                  ? { national_id_number }
+                                  : {}),
+                            ...(clear_phone
+                                ? { phone_number: null }
+                                : phone_number
+                                  ? { phone_number }
+                                  : {}),
+                        }),
+                    );
+                    const options = { onSuccess: () => form.setDefaults() };
+                    if (resident) form.put('/masyarakat/' + resident.id, options);
+                    else form.post('/masyarakat', options);
+                }}
+            >
+                <Errors errors={form.errors} />
+                <section className="panel">
+                    <div className="section-heading">
+                        <h2>01 · Identitas dasar</h2>
+                        {resident && <Badge muted>{resident.registration_number}</Badge>}
+                    </div>
+                    <fieldset disabled={!canManage} className="form-grid">
+                        <Field label="Nama lengkap" error={form.errors.full_name}>
+                            <input
+                                required
+                                maxLength={150}
+                                value={form.data.full_name}
+                                onChange={(e) => form.setData('full_name', e.target.value)}
+                                autoComplete="off"
+                            />
+                        </Field>
+                        <Field label="Jenis kelamin" error={form.errors.gender}>
+                            <select
+                                value={form.data.gender}
+                                onChange={(e) =>
+                                    form.setData('gender', e.target.value as 'L' | 'P')
+                                }
+                            >
+                                <option value="L">Laki-laki</option>
+                                <option value="P">Perempuan</option>
+                            </select>
+                        </Field>
+                        <Field
+                            label="Tanggal lahir"
+                            hint="Kosongkan jika belum diketahui. Jangan membuat tanggal pengganti."
+                            error={form.errors.birth_date}
+                        >
+                            <input
+                                type="date"
+                                max={today}
+                                value={form.data.birth_date}
+                                onChange={(e) => form.setData('birth_date', e.target.value)}
+                            />
+                        </Field>
+                        <label className="checkbox-field">
+                            <input
+                                type="checkbox"
+                                checked={form.data.is_birth_date_estimated}
+                                onChange={(e) =>
+                                    form.setData('is_birth_date_estimated', e.target.checked)
+                                }
+                            />
+                            Tanggal lahir merupakan estimasi
+                        </label>
+                    </fieldset>
+                    <div className="form-grid">
+                        <Field label="Keluarga" error={form.errors.household_id}>
+                            <select
+                                disabled={!canManage}
+                                value={form.data.household_id}
+                                onChange={(e) => {
+                                    form.setData({
+                                        ...form.data,
+                                        household_id: e.target.value,
+                                        guardian_id: '',
+                                    });
+                                    form.clearErrors('household_id', 'guardian_id');
+                                }}
+                            >
+                                <option value="">Belum dihubungkan</option>
+                                {households.map((family) => (
+                                    <option key={family.id} value={family.id}>
+                                        {family.head_of_household_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field
+                            label="Orang tua / wali"
+                            error={form.errors.guardian_id}
+                            hint={guardianHint}
+                        >
+                            <select
+                                disabled={
+                                    !canManage || !form.data.household_id || !familyGuardians.length
+                                }
+                                value={form.data.guardian_id}
+                                onChange={(e) => form.setData('guardian_id', e.target.value)}
+                            >
+                                <option value="">
+                                    {form.data.household_id
+                                        ? 'Belum dihubungkan'
+                                        : 'Pilih keluarga terlebih dahulu'}
+                                </option>
+                                {familyGuardians.map((person) => (
+                                    <option key={person.id} value={person.id}>
+                                        {person.full_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field label="Hubungan dalam keluarga">
+                            <input
+                                disabled={!canManage}
+                                maxLength={30}
+                                value={form.data.family_relationship}
+                                onChange={(e) =>
+                                    form.setData('family_relationship', e.target.value)
+                                }
+                            />
+                        </Field>
+                    </div>
+                    <p className="helper-note">
+                        <Link href="/masyarakat/keluarga/daftar">Kelola keluarga dan nomor KK</Link>{' '}
+                        · Kelompok usia memakai konfigurasi sementara berversi.
+                    </p>
+                </section>
+                <section className="panel">
+                    <h2>NIK dan kontak opsional</h2>
+                    <p className="subtle">
+                        Boleh kosong, termasuk untuk bayi. NIK tidak menggantikan nomor registrasi.
+                        Nomor KK dicatat satu kali pada keluarga.
+                    </p>
+                    {resident && (
+                        <dl>
+                            <dt>NIK tersimpan</dt>
+                            <dd className="mono">
+                                {identityDetails?.national_id_number || 'Belum diisi'}
+                            </dd>
+                            <dt>Kontak tersimpan</dt>
+                            <dd className="mono">
+                                {identityDetails?.phone_number || 'Belum diisi'}
+                            </dd>
+                            <dt>Nomor KK keluarga</dt>
+                            <dd className="mono">
+                                {identityDetails?.family_card_number ||
+                                    'Belum diisi / belum dihubungkan'}
+                            </dd>
+                        </dl>
+                    )}
+                    <fieldset disabled={!canManage} className="form-grid">
+                        <div>
+                            <Field
+                                label="NIK (opsional)"
+                                error={form.errors.national_id_number}
+                                hint={
+                                    resident
+                                        ? 'Isi untuk mengganti. Kosongkan untuk mempertahankan nomor tersimpan.'
+                                        : '16 digit jika tersedia; tidak wajib.'
+                                }
+                            >
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="off"
+                                    maxLength={16}
+                                    pattern="[0-9]{16}"
+                                    disabled={form.data.clear_national_id}
+                                    value={form.data.national_id_number}
+                                    onChange={(e) =>
+                                        form.setData('national_id_number', e.target.value)
+                                    }
+                                />
+                            </Field>
+                            {resident && (
+                                <label className="checkbox-field">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.data.clear_national_id}
+                                        onChange={(e) =>
+                                            form.setData('clear_national_id', e.target.checked)
+                                        }
+                                    />
+                                    Hapus NIK tersimpan
+                                </label>
+                            )}
+                        </div>
+                        <div>
+                            <Field
+                                label="Kontak telepon (opsional)"
+                                error={form.errors.phone_number}
+                                hint={
+                                    resident
+                                        ? 'Isi untuk mengganti; kosong mempertahankan kontak tersimpan.'
+                                        : 'Nomor warga atau orang tua/wali yang dapat dihubungi.'
+                                }
+                            >
+                                <input
+                                    type="tel"
+                                    autoComplete="off"
+                                    maxLength={30}
+                                    disabled={form.data.clear_phone}
+                                    value={form.data.phone_number}
+                                    onChange={(e) => form.setData('phone_number', e.target.value)}
+                                />
+                            </Field>
+                            {resident && (
+                                <label className="checkbox-field">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.data.clear_phone}
+                                        onChange={(e) =>
+                                            form.setData('clear_phone', e.target.checked)
+                                        }
+                                    />
+                                    Hapus kontak tersimpan
+                                </label>
+                            )}
+                        </div>
+                    </fieldset>
+                    <p className="helper-note">
+                        Nomor lengkap hanya terlihat bagi akun dengan izin khusus; akun lainnya
+                        melihat nomor tersamar.
+                    </p>
+                </section>
+                <section className="panel">
+                    <h2>02 · Alamat dan status kependudukan</h2>
+                    <fieldset disabled={!canManage} className="form-grid">
+                        <Field label="Alamat" error={form.errors.address}>
+                            <textarea
+                                maxLength={1000}
+                                value={form.data.address}
+                                onChange={(e) => form.setData('address', e.target.value)}
+                            />
+                        </Field>
+                        <div className="form-grid">
+                            <Field label="RT">
+                                <input
+                                    maxLength={10}
+                                    value={form.data.rt}
+                                    onChange={(e) => form.setData('rt', e.target.value)}
+                                />
+                            </Field>
+                            <Field label="RW">
+                                <input
+                                    maxLength={10}
+                                    value={form.data.rw}
+                                    onChange={(e) => form.setData('rw', e.target.value)}
+                                />
+                            </Field>
+                        </div>
+                        <Field label="Status warga" error={form.errors.residency_status}>
+                            <select
+                                value={form.data.residency_status}
+                                onChange={(e) => form.setData('residency_status', e.target.value)}
+                            >
+                                {['active', 'moved', 'deceased', 'inactive'].map((value) => (
+                                    <option key={value} value={value}>
+                                        {statusLabels[value]}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field label="Tanggal efektif" error={form.errors.effective_date}>
+                            <input
+                                required
+                                type="date"
+                                max={today}
+                                value={form.data.effective_date}
+                                onChange={(e) => form.setData('effective_date', e.target.value)}
+                            />
+                        </Field>
+                        <Field
+                            label="Alasan pencatatan / perubahan"
+                            error={form.errors.reason}
+                            hint="Wajib untuk jejak audit. Hindari menuliskan data kesehatan sensitif."
+                        >
+                            <textarea
+                                required
+                                minLength={5}
+                                maxLength={500}
+                                value={form.data.reason}
+                                onChange={(e) => form.setData('reason', e.target.value)}
+                            />
+                        </Field>
+                    </fieldset>
+                    <p className="helper-note">
+                        Pilih “Diarsipkan” untuk menonaktifkan warga. Riwayat kunjungan dan laporan
+                        terkunci tetap tersedia.
+                    </p>
+                </section>
+                {canManage && (
+                    <div className="form-actions">
+                        <Link href="/masyarakat">Batal</Link>
+                        <Button type="submit" disabled={form.processing}>
+                            {form.processing ? 'Menyimpan…' : 'Simpan warga'}
+                        </Button>
+                    </div>
+                )}
+            </form>
+            {resident?.gender === 'P' && (
+                <MaternalEpisodes
+                    resident={resident}
+                    episodes={episodes}
+                    today={today}
+                    canManage={canManage}
+                />
+            )}
+            {!!history.length && (
+                <section className="panel">
+                    <h2>Riwayat status</h2>
+                    <div className="table-scroll" tabIndex={0}>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Efektif</th>
+                                    <th>Status</th>
+                                    <th>Alasan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {history.map((row, index) => (
+                                    <tr key={index}>
+                                        <td>{row.effective_date}</td>
+                                        <td>{statusLabels[row.status]}</td>
+                                        <td>{row.reason}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
+            {!!visits.length && (
+                <section className="panel">
+                    <h2>Riwayat kunjungan terbaru</h2>
+                    {visits.map((visit) => (
+                        <div className="history-row" key={visit.id}>
+                            <span>{localDateTime(visit.visited_at)}</span>
+                            <Badge muted>{statusLabels[visit.record_status]}</Badge>
+                        </div>
+                    ))}
+                </section>
+            )}
+        </Layout>
+    );
+}

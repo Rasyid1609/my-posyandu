@@ -1,0 +1,13 @@
+/node_modules/
+/vendor/
+/public/build/
+/public/storage/
+/storage/
+/bootstrap/cache/
+/backups/
+/.agents/
+/.codex/
+/package-lock.json
+/composer.lock
+/resources/anthropometry-2020.json
+/resources/views/**/*.blade.php

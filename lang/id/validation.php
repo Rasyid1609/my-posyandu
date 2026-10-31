@@ -1,0 +1,43 @@
+<?php
+
+return [
+    'required' => ':attribute wajib diisi.',
+    'present' => ':attribute harus disertakan.',
+    'email' => 'Format :attribute tidak valid.',
+    'string' => ':attribute harus berupa teks.',
+    'integer' => ':attribute harus berupa bilangan bulat.',
+    'numeric' => ':attribute harus berupa angka.',
+    'boolean' => ':attribute harus berupa ya atau tidak.',
+    'array' => ':attribute harus berupa daftar.',
+    'in' => 'Pilihan :attribute tidak valid.',
+    'exists' => ':attribute tidak ditemukan.',
+    'unique' => ':attribute sudah digunakan.',
+    'date_format' => ':attribute tidak sesuai format tanggal.',
+    'before_or_equal' => ':attribute tidak boleh setelah :date.',
+    'required_if' => ':attribute wajib diisi untuk kondisi yang dipilih.',
+    'prohibited_unless' => ':attribute harus dikosongkan untuk kondisi yang dipilih.',
+    'gt' => ['numeric' => ':attribute harus lebih dari :value.'],
+    'decimal' => ':attribute hanya boleh memiliki :decimal angka desimal.',
+    'max' => [
+        'numeric' => ':attribute maksimal :max.',
+        'string' => ':attribute maksimal :max karakter.',
+        'array' => ':attribute maksimal :max item.',
+    ],
+    'min' => [
+        'numeric' => ':attribute minimal :min.',
+        'string' => ':attribute minimal :min karakter.',
+    ],
+    'between' => ['numeric' => ':attribute harus antara :min dan :max.'],
+    'attributes' => [
+        'month' => 'Bulan',
+        'year' => 'Tahun',
+        'reason' => 'Alasan',
+        'revision' => 'Revisi',
+        'full_name' => 'Nama lengkap',
+        'resident_id' => 'Warga',
+        'password' => 'Kata sandi',
+        'name' => 'Nama',
+        'role' => 'Jabatan',
+        'attendance_status' => 'Kehadiran',
+    ],
+];
