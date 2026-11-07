@@ -14,6 +14,13 @@ export default defineConfig({
         tailwindcss(),
     ],
     server: {
-        watch: { ignored: ['**/storage/framework/views/**', '**/.agents/**', '**/.codex/**'] },
+        host: '0.0.0.0',
+        port: 5173,
+        strictPort: true,
+        hmr: { host: 'localhost' },
+        watch: {
+            usePolling: process.env.VITE_USE_POLLING === 'true',
+            ignored: ['**/storage/framework/views/**', '**/.agents/**', '**/.codex/**'],
+        },
     },
 });

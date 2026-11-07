@@ -69,7 +69,76 @@ npm.cmd audit
 
 Suite default menggunakan SQLite in-memory. Suite PostgreSQL menggunakan transaksi rollback tanpa RefreshDatabase/migrate:fresh/truncate; jalankan hanya pada database pengembangan yang telah dimigrasikan. Browser memakai Edge headless, port 8013, SQLite sintetis baru di `storage/framework/testing`, dan server dihentikan setelah pengujian. Screenshot/unduhan sintetis berada di folder hasil uji itu. Hasil terbaru dan batas pengujian tercatat di [progress.md](docs/progress.md).
 
-## Dokumen
+## Menjalankan via Docker
+
+Sebagai alternatif pengembangan lokal, Docker Compose menjalankan PHP 8.5-FPM, PostgreSQL, Nginx, dan Vite. Source code dipasang ke container; perubahan frontend dipantau oleh Vite.
+
+### Prasyarat
+
+- Docker Desktop (macOS/Windows) atau Docker Engine dan Docker Compose plugin v2 (Linux).
+- Git (jika belum clone repo).
+
+Di macOS, instal dan jalankan Docker Desktop (contoh: `brew install --cask docker`). Pastikan perintah `docker compose version` berhasil.
+
+### 1. Siapkan environment
+
+```bash
+cp .env.example .env
+```
+
+Isi `DB_PASSWORD` di `.env` dengan password lokal yang kuat dan jangan gunakan password produksi. Compose memakai nilai ini untuk user PostgreSQL `posyandu_user`; `DB_HOST` di container otomatis diarahkan ke service `db`.
+
+### 2. Build image dan buat APP_KEY (instalasi baru)
+
+```bash
+docker compose build app
+docker compose run --rm --no-deps app php artisan key:generate
+```
+
+Jalankan `key:generate` hanya untuk instalasi baru yang `APP_KEY`-nya masih kosong. Jangan mengganti `APP_KEY` pada instalasi yang sudah ada.
+
+### 3. Jalankan layanan dan migrasi
+
+```bash
+docker compose up -d
+docker compose exec app php artisan migrate --no-interaction
+docker compose exec app php artisan db:seed --class=AccessControlSeeder --no-interaction
+docker compose exec app php artisan permission:cache-reset
+```
+
+Jangan jalankan seeder demo pada database yang berisi data pengguna. Buat akun Ketua pertama secara interaktif agar password dimasukkan melalui prompt privat:
+
+```bash
+docker compose exec app php artisan posyandu:create-superadmin ketua@contoh.test --name="Nama Ketua"
+```
+
+Compose menjalankan layanan berikut:
+
+- **app** – PHP-FPM; hanya dapat diakses dari jaringan Docker.
+- **db** – PostgreSQL; port lokal opsional `5433` untuk alat database.
+- **nginx** – aplikasi web di port **8000**.
+- **frontend** – Vite dev server di port **5173**; `npm ci` berjalan di container.
+
+### Perintah Docker sehari-hari
+
+```bash
+docker compose ps
+docker compose logs -f app frontend
+docker compose exec app sh
+docker compose exec app php artisan migrate --no-interaction
+docker compose exec app php artisan queue:work --queue=default --tries=2 --timeout=60
+docker compose down
+```
+
+`docker compose down` menghentikan container tanpa menghapus volume database dan file. Jangan gunakan `docker compose down -v` kecuali memang ingin menghapus semua data Docker project ini.
+
+### Akses aplikasi dan mode lokal
+
+Buka **http://localhost:8000**. Untuk menjalankan tanpa Docker, ikuti bagian **Menjalankan lokal — Windows/Laragon**. Hindari menjalankan kedua mode sekaligus jika port 8000 atau 5173 sedang digunakan.
+
+---
+
+## Dokumentasi
 
 - [Kebutuhan, keputusan, matriks izin](docs/requirements.md)
 - [Arsitektur dan kamus data](docs/architecture.md)
