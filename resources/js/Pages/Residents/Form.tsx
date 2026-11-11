@@ -1,9 +1,18 @@
 import { Link, useForm } from '@inertiajs/react';
+import { useState } from 'react';
 import MaternalEpisodes from '../../components/MaternalEpisodes';
+import WilayahFields from '../../components/WilayahFields';
 import Layout, { usePermission } from '../../components/Layout';
 import { Badge, Button, Errors, Field } from '../../components/ui';
 import { useDraftGuard } from '../../components/useDraftGuard';
 import { localDateTime, statusLabels, type Resident, type Visit } from '../../types';
+import { formatNikDisplay, parseNik } from '../../lib/nik';
+import {
+    applyWilayahSuffix,
+    defaultWilayah,
+    splitWilayahSuffix,
+    type WilayahValue,
+} from '../../lib/wilayah';
 
 export default function Form({
     resident,
@@ -35,6 +44,10 @@ export default function Form({
     }[];
 }) {
     const canManage = usePermission('residents.manage');
+    const initialAddress = splitWilayahSuffix(resident?.address || '');
+    const [wilayah, setWilayah] = useState<WilayahValue>(
+        resident ? initialAddress.value : defaultWilayah,
+    );
     const initialGuardian = guardians.find(
         (person) =>
             person.id === resident?.guardian_id && person.household_id === resident?.household_id,
@@ -51,7 +64,7 @@ export default function Form({
         household_id: String(resident?.household_id || ''),
         guardian_id: String(initialGuardian?.id || ''),
         family_relationship: resident?.family_relationship || '',
-        address: resident?.address || '',
+        address: initialAddress.base,
         rt: resident?.rt || '',
         rw: resident?.rw || '',
         residency_status: resident?.residency_status || 'active',
@@ -71,6 +84,24 @@ export default function Form({
                 ? 'Belum ada anggota keluarga yang dapat dipilih sebagai wali.'
                 : 'Pilihan wali berasal dari anggota keluarga yang dipilih.';
     useDraftGuard(form.isDirty, form.processing);
+
+    // Satu arah: NIK → field terkait. Perubahan tanggal lahir/jenis kelamin/wilayah
+    // tidak mengubah NIK.
+    const handleNikChange = (digits: string) => {
+        form.setData('national_id_number', digits);
+        const parsed = parseNik(digits);
+        if (parsed) {
+            form.setData((data) => ({
+                ...data,
+                gender: parsed.gender,
+                birth_date: parsed.birthDate,
+            }));
+            setWilayah((current) => ({
+                ...current,
+                ...parsed.wilayah,
+            }));
+        }
+    };
     return (
         <Layout
             title={resident ? 'Detail warga' : 'Tambah warga'}
@@ -93,9 +124,11 @@ export default function Form({
                             phone_number,
                             clear_national_id,
                             clear_phone,
+                            address,
                             ...data
                         }) => ({
                             ...data,
+                            address: applyWilayahSuffix(address, wilayah),
                             ...(clear_national_id
                                 ? { national_id_number: null }
                                 : national_id_number
@@ -129,6 +162,59 @@ export default function Form({
                                 autoComplete="off"
                             />
                         </Field>
+                        <div>
+                            <Field
+                                label="NIK (opsional)"
+                                error={form.errors.national_id_number}
+                                hint={
+                                    resident
+                                        ? 'Isi untuk mengganti. Kosongkan untuk mempertahankan nomor tersimpan.'
+                                        : '16 digit jika tersedia; tidak wajib. NIK tidak menggantikan nomor registrasi. Bila 16 digit lengkap, tanggal lahir, jenis kelamin, dan wilayah alamat terisi otomatis.'
+                                }
+                            >
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="off"
+                                    className="mono"
+                                    disabled={form.data.clear_national_id}
+                                    value={formatNikDisplay(form.data.national_id_number)}
+                                    onChange={(e) =>
+                                        handleNikChange(
+                                            e.target.value.replace(/\D/g, '').slice(0, 16),
+                                        )
+                                    }
+                                    onKeyDown={(e) => {
+                                        // Backspace di posisi tanda hubung/underscore: hapus
+                                        // digit sebelum kursor, karena karakter mask akan
+                                        // di-render ulang dan tanpa ini input terasa macet.
+                                        if (e.key !== 'Backspace') return;
+                                        const mask = formatNikDisplay(
+                                            form.data.national_id_number,
+                                        );
+                                        const caret = e.currentTarget.selectionStart ?? 0;
+                                        if (caret < 1 || !'-_'.includes(mask[caret - 1])) return;
+                                        e.preventDefault();
+                                        const digitsBeforeCaret = mask
+                                            .slice(0, caret - 1)
+                                            .replace(/\D/g, '');
+                                        handleNikChange(digitsBeforeCaret.slice(0, -1));
+                                    }}
+                                />
+                            </Field>
+                            {resident && (
+                                <label className="checkbox-field">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.data.clear_national_id}
+                                        onChange={(e) =>
+                                            form.setData('clear_national_id', e.target.checked)
+                                        }
+                                    />
+                                    Hapus NIK tersimpan
+                                </label>
+                            )}
+                        </div>
                         <Field label="Jenis kelamin" error={form.errors.gender}>
                             <select
                                 value={form.data.gender}
@@ -140,28 +226,33 @@ export default function Form({
                                 <option value="P">Perempuan</option>
                             </select>
                         </Field>
-                        <Field
-                            label="Tanggal lahir"
-                            hint="Kosongkan jika belum diketahui. Jangan membuat tanggal pengganti."
-                            error={form.errors.birth_date}
-                        >
-                            <input
-                                type="date"
-                                max={today}
-                                value={form.data.birth_date}
-                                onChange={(e) => form.setData('birth_date', e.target.value)}
-                            />
-                        </Field>
-                        <label className="checkbox-field">
-                            <input
-                                type="checkbox"
-                                checked={form.data.is_birth_date_estimated}
-                                onChange={(e) =>
-                                    form.setData('is_birth_date_estimated', e.target.checked)
-                                }
-                            />
-                            Tanggal lahir merupakan estimasi
-                        </label>
+                        <div>
+                            <Field
+                                label="Tanggal lahir"
+                                hint="Kosongkan jika belum diketahui. Jangan membuat tanggal pengganti."
+                                error={form.errors.birth_date}
+                            >
+                                <input
+                                    type="date"
+                                    max={today}
+                                    value={form.data.birth_date}
+                                    onChange={(e) => form.setData('birth_date', e.target.value)}
+                                />
+                            </Field>
+                            <label
+                                className="checkbox-field"
+                                style={{ justifyContent: 'flex-end' }}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={form.data.is_birth_date_estimated}
+                                    onChange={(e) =>
+                                        form.setData('is_birth_date_estimated', e.target.checked)
+                                    }
+                                />
+                                Tanggal lahir merupakan estimasi
+                            </label>
+                        </div>
                     </fieldset>
                     <div className="form-grid">
                         <Field label="Keluarga" error={form.errors.household_id}>
@@ -226,11 +317,8 @@ export default function Form({
                     </p>
                 </section>
                 <section className="panel">
-                    <h2>NIK dan kontak opsional</h2>
-                    <p className="subtle">
-                        Boleh kosong, termasuk untuk bayi. NIK tidak menggantikan nomor registrasi.
-                        Nomor KK dicatat satu kali pada keluarga.
-                    </p>
+                    <h2>Kontak</h2>
+                    <p className="subtle">Boleh kosong.</p>
                     {resident && (
                         <dl>
                             <dt>NIK tersimpan</dt>
@@ -249,42 +337,6 @@ export default function Form({
                         </dl>
                     )}
                     <fieldset disabled={!canManage} className="form-grid">
-                        <div>
-                            <Field
-                                label="NIK (opsional)"
-                                error={form.errors.national_id_number}
-                                hint={
-                                    resident
-                                        ? 'Isi untuk mengganti. Kosongkan untuk mempertahankan nomor tersimpan.'
-                                        : '16 digit jika tersedia; tidak wajib.'
-                                }
-                            >
-                                <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    autoComplete="off"
-                                    maxLength={16}
-                                    pattern="[0-9]{16}"
-                                    disabled={form.data.clear_national_id}
-                                    value={form.data.national_id_number}
-                                    onChange={(e) =>
-                                        form.setData('national_id_number', e.target.value)
-                                    }
-                                />
-                            </Field>
-                            {resident && (
-                                <label className="checkbox-field">
-                                    <input
-                                        type="checkbox"
-                                        checked={form.data.clear_national_id}
-                                        onChange={(e) =>
-                                            form.setData('clear_national_id', e.target.checked)
-                                        }
-                                    />
-                                    Hapus NIK tersimpan
-                                </label>
-                            )}
-                        </div>
                         <div>
                             <Field
                                 label="Kontak telepon (opsional)"
@@ -333,6 +385,24 @@ export default function Form({
                                 onChange={(e) => form.setData('address', e.target.value)}
                             />
                         </Field>
+                        <Field
+                            label="Alasan pencatatan / perubahan"
+                            error={form.errors.reason}
+                            hint="Wajib untuk jejak audit. Hindari menuliskan data kesehatan sensitif."
+                        >
+                            <textarea
+                                required
+                                minLength={5}
+                                maxLength={500}
+                                value={form.data.reason}
+                                onChange={(e) => form.setData('reason', e.target.value)}
+                            />
+                        </Field>
+                        <WilayahFields
+                            value={wilayah}
+                            onChange={setWilayah}
+                            disabled={!canManage}
+                        />
                         <div className="form-grid">
                             <Field label="RT">
                                 <input
@@ -368,19 +438,6 @@ export default function Form({
                                 max={today}
                                 value={form.data.effective_date}
                                 onChange={(e) => form.setData('effective_date', e.target.value)}
-                            />
-                        </Field>
-                        <Field
-                            label="Alasan pencatatan / perubahan"
-                            error={form.errors.reason}
-                            hint="Wajib untuk jejak audit. Hindari menuliskan data kesehatan sensitif."
-                        >
-                            <textarea
-                                required
-                                minLength={5}
-                                maxLength={500}
-                                value={form.data.reason}
-                                onChange={(e) => form.setData('reason', e.target.value)}
                             />
                         </Field>
                     </fieldset>

@@ -664,6 +664,51 @@ main#main {
     color: var(--destructive);
     font-size: 12px;
 }
+.wilayah-combobox {
+    position: relative;
+}
+.wilayah-combobox-list {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    border: 1px solid var(--input);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 18px rgb(0 0 0 / 10%);
+}
+.wilayah-combobox-list button {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.wilayah-combobox-list button:hover,
+.wilayah-combobox-list button.active {
+    background: var(--accent);
+    color: var(--accent-foreground);
+}
+.wilayah-combobox-list button small {
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--muted-foreground);
+}
 .form-stack {
     display: grid;
     gap: 20px;
