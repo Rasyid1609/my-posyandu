@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Household;
 use App\Models\Resident;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
@@ -30,6 +31,24 @@ class ResidentRegistry
                 ->exists();
             if ($duplicate) {
                 throw ValidationException::withMessages(['full_name' => 'Kemungkinan warga duplikat. Periksa nama, tanggal lahir, dan jenis kelamin pada data yang ada.']);
+            }
+            // Pendaftaran kepala keluarga dari form warga: keluarga baru dibuat otomatis,
+            // relasi keluarga/wali yang dikirim diabaikan.
+            if (! empty($data['is_head_of_household']) && ! ($resident && $resident->exists)) {
+                $household = new Household([
+                    'head_of_household_name' => trim($data['full_name']),
+                    'address' => $data['address'] ?? null,
+                    'rt' => $data['rt'] ?: '45',
+                    'rw' => $data['rw'] ?: '45',
+                    'is_active' => true,
+                    'revision' => 1,
+                ]);
+                $this->identities->household($household, Arr::only($data, ['family_card_number']));
+                $household->save();
+                $this->audit->record('household.saved', $household, $data['reason']);
+                $data['household_id'] = $household->id;
+                $data['guardian_id'] = null;
+                $data['family_relationship'] = $data['family_relationship'] ?: 'Kepala Keluarga';
             }
             $previousStatus = $resident?->residency_status;
             $resident ??= new Resident(['registration_number' => 'PJ-'.Str::upper(Str::ulid())]);

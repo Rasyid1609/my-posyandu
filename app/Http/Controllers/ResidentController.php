@@ -183,8 +183,48 @@ class ResidentController extends Controller
 
     private function lookups(?Resident $resident = null): array
     {
+        $households = Household::query()
+            ->orderBy('head_of_household_name')
+            ->get(['id', 'head_of_household_name', 'address', 'rt', 'rw', 'family_card_ciphertext']);
+        $identities = new IdentityDetails;
+        // Data kontak kepala keluarga untuk pengisian otomatis alamat/kontak anggota
+        // (level UI). Kontak hanya dikirim bila user berwenang melihat identitas penuh.
+        $reveal = auth()->user()?->can('identity.reveal') ?? false;
+        $headCandidates = $households->isNotEmpty()
+            ? Resident::query()
+                ->whereIn('household_id', $households->pluck('id'))
+                ->whereNotNull('household_id')
+                ->get(['id', 'household_id', 'full_name', 'phone_ciphertext'])
+            : collect();
+        $headPhone = [];
+        foreach ($headCandidates as $candidate) {
+            $family = $households->firstWhere('id', $candidate->household_id);
+            if (! $family) {
+                continue;
+            }
+            $isHead = Str::lower(trim($candidate->full_name))
+                === Str::lower(trim($family->head_of_household_name));
+            if ($isHead && ! isset($headPhone[$family->id])) {
+                $headPhone[$family->id] = $reveal
+                    ? $identities->display($candidate->phone_ciphertext, true)
+                    : null;
+            }
+        }
+
         return [
-            'households' => Household::query()->orderBy('head_of_household_name')->get(['id', 'head_of_household_name']),
+            'households' => $households
+                ->map(fn (Household $family) => [
+                    'id' => $family->id,
+                    'head_of_household_name' => $family->head_of_household_name,
+                    'address' => $family->address,
+                    'rt' => $family->rt,
+                    'rw' => $family->rw,
+                    'head_phone' => $headPhone[$family->id] ?? null,
+                    'family_card_display' => $identities->display(
+                        $family->family_card_ciphertext,
+                        $reveal,
+                    ),
+                ]),
             'guardians' => Resident::query()
                 ->whereNotNull('household_id')
                 ->when($resident, fn ($q) => $q->whereKeyNot($resident->id))

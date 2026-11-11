@@ -85,7 +85,11 @@ export function applyWilayahSuffix(baseAddress: string, value: WilayahValue): st
  * Nama yang cocok dengan data dikembalikan sebagai kode; yang tidak cocok tetap dipertahankan
  * sebagai teks bebas.
  */
-export function splitWilayahSuffix(address: string): { base: string; value: WilayahValue } {
+export function splitWilayahSuffix(address: string): {
+    base: string;
+    value: WilayahValue;
+    matched: boolean;
+} {
     const match = address.match(/,\s*([^,]+),\s*([^,]+),\s*([^,]+)\s*$/);
     const value: WilayahValue = { ...defaultWilayah };
     if (match) {
@@ -109,6 +113,7 @@ export function splitWilayahSuffix(address: string): { base: string; value: Wila
             return {
                 base: address.slice(0, match.index).trim().replace(/,\s*$/, ''),
                 value,
+                matched: true,
             };
         }
         return {
@@ -119,7 +124,8 @@ export function splitWilayahSuffix(address: string): { base: string; value: Wila
                 cityName: cityName,
                 districtName: districtName,
             },
+            matched: true,
         };
     }
-    return { base: address, value };
+    return { base: address, value, matched: false };
 }

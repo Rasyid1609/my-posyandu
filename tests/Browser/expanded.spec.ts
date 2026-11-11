@@ -18,13 +18,21 @@ test('keluarga → maternal → kegiatan → layanan → rumah → lima rekap �
     await page.getByRole('button', { name: 'Masuk ke ruang kerja' }).click();
     await expect(page).toHaveURL(/\/masyarakat$/);
     await page.getByRole('link', { name: 'Data keluarga & anggota' }).click();
-    await page.getByLabel('Nama kepala keluarga', { exact: true }).fill(family);
+    await page.goto('/masyarakat/create');
+    // Keluarga dibuat lewat form warga: centang "Kepala Keluarga" agar keluarga
+    // dibuat otomatis dengan warga ini sebagai kepala keluarganya.
+    await page.getByLabel('Nama lengkap', { exact: true }).fill(family);
+    await page.getByRole('checkbox', { name: 'Kepala Keluarga', exact: true }).check();
     const kk = testInfo.project.name === 'desktop' ? '0123456789098765' : '0123456789098766';
-    await page.getByLabel('Nomor KK (opsional)', { exact: true }).fill(kk);
-    await page.getByRole('button', { name: 'Simpan keluarga', exact: true }).click();
+    await page.getByLabel('No KK (opsional)', { exact: true }).fill(kk);
+    await page
+        .getByLabel('Alasan pencatatan / perubahan', { exact: true })
+        .fill('Pendaftaran kepala keluarga layanan sintetis');
+    await page.getByRole('button', { name: 'Simpan warga', exact: true }).click();
     await expect(page.getByRole('region', { name: /^Notifikasi/ })).toContainText(
-        'Keluarga disimpan',
+        'Warga berhasil ditambahkan',
     );
+    await page.goto('/masyarakat/keluarga/daftar');
     await page
         .getByRole('row')
         .filter({ hasText: family })
@@ -33,9 +41,10 @@ test('keluarga → maternal → kegiatan → layanan → rumah → lima rekap �
     await expect(page.getByRole('heading', { name: 'Detail keluarga', exact: true })).toBeVisible();
     const familyDetailUrl = page.url();
     await expect(page.getByRole('region', { name: family, exact: true })).toContainText(kk);
+    // Kepala keluarga yang baru didaftarkan otomatis menjadi anggota keluarga.
     await expect(
-        page.getByText('Belum ada anggota yang dihubungkan ke keluarga ini.', { exact: true }),
-    ).toBeVisible();
+        page.getByRole('region', { name: 'Anggota keluarga', exact: true }),
+    ).toContainText(family);
     await expect(
         page.getByText('Belum ada kunjungan rumah untuk keluarga ini.', { exact: true }),
     ).toBeVisible();
@@ -43,7 +52,11 @@ test('keluarga → maternal → kegiatan → layanan → rumah → lima rekap �
     await page.getByLabel('Nama lengkap', { exact: true }).fill(person);
     await page.getByLabel('Jenis kelamin', { exact: true }).selectOption('P');
     await page.getByLabel('Tanggal lahir', { exact: true }).fill('1995-01-01');
-    await page.getByLabel('Keluarga', { exact: true }).selectOption({ label: family });
+    await page.getByLabel('Keluarga', { exact: true }).click();
+    await page
+        .getByLabel('Keluarga', { exact: true })
+        .fill(family);
+    await page.getByRole('option', { name: family, exact: true }).click();
     await page
         .getByLabel('Alasan pencatatan / perubahan', { exact: true })
         .fill('Data layanan sintetis browser');
@@ -156,6 +169,8 @@ test('keluarga → maternal → kegiatan → layanan → rumah → lima rekap �
     await page.getByRole('button', { name: 'Aktifkan mode terang' }).click();
     await page
         .getByRole('region', { name: 'Anggota keluarga', exact: true })
+        .getByRole('row')
+        .filter({ hasText: person })
         .getByRole('link', { name: 'Detail warga', exact: true })
         .click();
     await expect(page.getByLabel('Nama lengkap', { exact: true })).toHaveValue(person);

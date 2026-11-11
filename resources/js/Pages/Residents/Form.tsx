@@ -2,6 +2,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import MaternalEpisodes from '../../components/MaternalEpisodes';
 import WilayahFields from '../../components/WilayahFields';
+import SearchCombobox, { isFreeTextSelection } from '../../components/SearchCombobox';
 import Layout, { usePermission } from '../../components/Layout';
 import { Badge, Button, Errors, Field } from '../../components/ui';
 import { useDraftGuard } from '../../components/useDraftGuard';
@@ -33,7 +34,15 @@ export default function Form({
     history: { status: string; effective_date: string; reason: string }[];
     visits: Visit[];
     today: string;
-    households: { id: number; head_of_household_name: string }[];
+    households: {
+        id: number;
+        head_of_household_name: string;
+        address?: string | null;
+        rt?: string | null;
+        rw?: string | null;
+        head_phone?: string | null;
+        family_card_display?: string | null;
+    }[];
     guardians: { id: number; full_name: string; household_id: number }[];
     episodes: {
         id: number;
@@ -64,6 +73,8 @@ export default function Form({
         household_id: String(resident?.household_id || ''),
         guardian_id: String(initialGuardian?.id || ''),
         family_relationship: resident?.family_relationship || '',
+        is_head_of_household: false,
+        family_card_number: '',
         address: initialAddress.base,
         rt: resident?.rt || '',
         rw: resident?.rw || '',
@@ -102,6 +113,36 @@ export default function Form({
             }));
         }
     };
+
+    // Menghubungkan warga ke keluarga, lalu mengisi alamat & kontak dari data
+    // yang tercatat atas kepala keluarganya (level UI; anggota bebas mengubahnya).
+    const applyHouseholdLink = (value: string) => {
+        form.setData({ ...form.data, household_id: value, guardian_id: '' });
+        form.clearErrors('household_id', 'guardian_id');
+        const family = households.find((item) => String(item.id) === value);
+        if (!family) return;
+        const parsed = splitWilayahSuffix(family.address || '');
+        form.setData((data) => ({
+            ...data,
+            address: parsed.base,
+            rt: family.rt || data.rt,
+            rw: family.rw || data.rw,
+            phone_number: family.head_phone || data.phone_number,
+        }));
+        if (parsed.matched) setWilayah(parsed.value);
+    };
+
+    // Tampilan No KK: masukan kepala keluarga memakai mask; anggota melihat
+    // nomor KK keluarga terpilih (penuh bila berwenang, tersamar bila tidak).
+    const selectedFamilyCard =
+        households.find((family) => String(family.id) === form.data.household_id)
+            ?.family_card_display || '';
+    const familyCardValue = form.data.is_head_of_household
+        ? formatNikDisplay(form.data.family_card_number)
+        : /^\d{16}$/.test(selectedFamilyCard)
+          ? formatNikDisplay(selectedFamilyCard)
+          : selectedFamilyCard;
+
     return (
         <Layout
             title={resident ? 'Detail warga' : 'Tambah warga'}
@@ -125,10 +166,16 @@ export default function Form({
                             clear_national_id,
                             clear_phone,
                             address,
+                            family_card_number,
                             ...data
                         }) => ({
                             ...data,
                             address: applyWilayahSuffix(address, wilayah),
+                            // KK hanya dikirim saat mendaftarkan kepala keluarga
+                            // (menempel pada keluarga baru, bukan pada warga).
+                            ...(data.is_head_of_household && family_card_number
+                                ? { family_card_number }
+                                : {}),
                             ...(clear_national_id
                                 ? { national_id_number: null }
                                 : national_id_number
@@ -141,7 +188,12 @@ export default function Form({
                                   : {}),
                         }),
                     );
-                    const options = { onSuccess: () => form.setDefaults() };
+                    const options = {
+                        onSuccess: () => {
+                            form.setDefaults();
+                            form.setData('is_head_of_household', false);
+                        },
+                    };
                     if (resident) form.put('/masyarakat/' + resident.id, options);
                     else form.post('/masyarakat', options);
                 }}
@@ -169,7 +221,7 @@ export default function Form({
                                 hint={
                                     resident
                                         ? 'Isi untuk mengganti. Kosongkan untuk mempertahankan nomor tersimpan.'
-                                        : '16 digit jika tersedia; tidak wajib. NIK tidak menggantikan nomor registrasi. Bila 16 digit lengkap, tanggal lahir, jenis kelamin, dan wilayah alamat terisi otomatis.'
+                                        : 'NIK bersifat opsional dan tidak menggantikan nomor registrasi.'
                                 }
                             >
                                 <input
@@ -189,9 +241,7 @@ export default function Form({
                                         // digit sebelum kursor, karena karakter mask akan
                                         // di-render ulang dan tanpa ini input terasa macet.
                                         if (e.key !== 'Backspace') return;
-                                        const mask = formatNikDisplay(
-                                            form.data.national_id_number,
-                                        );
+                                        const mask = formatNikDisplay(form.data.national_id_number);
                                         const caret = e.currentTarget.selectionStart ?? 0;
                                         if (caret < 1 || !'-_'.includes(mask[caret - 1])) return;
                                         e.preventDefault();
@@ -254,28 +304,52 @@ export default function Form({
                             </label>
                         </div>
                     </fieldset>
-                    <div className="form-grid">
-                        <Field label="Keluarga" error={form.errors.household_id}>
-                            <select
-                                disabled={!canManage}
-                                value={form.data.household_id}
+                </section>
+                <section className="panel">
+                    <h2>02 · Keluarga</h2>
+                    {!resident && (
+                        <label className="checkbox-field">
+                            <input
+                                type="checkbox"
+                                checked={form.data.is_head_of_household}
                                 onChange={(e) => {
-                                    form.setData({
-                                        ...form.data,
-                                        household_id: e.target.value,
+                                    const checked = e.target.checked;
+                                    form.setData((data) => ({
+                                        ...data,
+                                        is_head_of_household: checked,
+                                        household_id: '',
                                         guardian_id: '',
-                                    });
+                                        family_relationship: checked ? 'Kepala Keluarga' : '',
+                                    }));
                                     form.clearErrors('household_id', 'guardian_id');
                                 }}
-                            >
-                                <option value="">Belum dihubungkan</option>
-                                {households.map((family) => (
-                                    <option key={family.id} value={family.id}>
-                                        {family.head_of_household_name}
-                                    </option>
-                                ))}
-                            </select>
-                        </Field>
+                            />
+                            Kepala Keluarga
+                        </label>
+                    )}
+                    <div className="form-grid">
+                        <SearchCombobox
+                            label="Keluarga"
+                            error={form.errors.household_id}
+                            disabled={!canManage || form.data.is_head_of_household}
+                            options={[
+                                { value: '', label: 'Belum dihubungkan' },
+                                ...households.map((family) => ({
+                                    value: String(family.id),
+                                    label: family.head_of_household_name,
+                                })),
+                            ]}
+                            selectedLabel={
+                                households.find(
+                                    (family) => String(family.id) === form.data.household_id,
+                                )?.head_of_household_name || ''
+                            }
+                            placeholder="Cari keluarga…"
+                            onSelect={(selection) => {
+                                if (isFreeTextSelection(selection)) return;
+                                applyHouseholdLink(selection.value);
+                            }}
+                        />
                         <Field
                             label="Orang tua / wali"
                             error={form.errors.guardian_id}
@@ -283,7 +357,10 @@ export default function Form({
                         >
                             <select
                                 disabled={
-                                    !canManage || !form.data.household_id || !familyGuardians.length
+                                    !canManage ||
+                                    form.data.is_head_of_household ||
+                                    !form.data.household_id ||
+                                    !familyGuardians.length
                                 }
                                 value={form.data.guardian_id}
                                 onChange={(e) => form.setData('guardian_id', e.target.value)}
@@ -300,9 +377,53 @@ export default function Form({
                                 ))}
                             </select>
                         </Field>
+                        <div>
+                            <Field
+                                label="No KK (opsional)"
+                                error={form.errors.family_card_number}
+                                hint={
+                                    form.data.is_head_of_household
+                                        ? '16 digit jika tersedia; tercatat pada keluarga baru.'
+                                        : 'Nomor KK dicatat satu kali pada keluarga.'
+                                }
+                            >
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="off"
+                                    className="mono"
+                                    disabled={!form.data.is_head_of_household}
+                                    value={familyCardValue}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'family_card_number',
+                                            e.target.value.replace(/\D/g, '').slice(0, 16),
+                                        )
+                                    }
+                                    onKeyDown={(e) => {
+                                        // Backspace di posisi mask: hapus digit sebelum
+                                        // kursor, sama seperti pada field NIK.
+                                        if (e.key !== 'Backspace') return;
+                                        const mask = formatNikDisplay(form.data.family_card_number);
+                                        const caret = e.currentTarget.selectionStart ?? 0;
+                                        if (caret < 1 || !'-_'.includes(mask[caret - 1])) {
+                                            return;
+                                        }
+                                        e.preventDefault();
+                                        const digitsBeforeCaret = mask
+                                            .slice(0, caret - 1)
+                                            .replace(/\D/g, '');
+                                        form.setData(
+                                            'family_card_number',
+                                            digitsBeforeCaret.slice(0, -1),
+                                        );
+                                    }}
+                                />
+                            </Field>
+                        </div>
                         <Field label="Hubungan dalam keluarga">
                             <input
-                                disabled={!canManage}
+                                disabled={!canManage || form.data.is_head_of_household}
                                 maxLength={30}
                                 value={form.data.family_relationship}
                                 onChange={(e) =>
@@ -317,66 +438,7 @@ export default function Form({
                     </p>
                 </section>
                 <section className="panel">
-                    <h2>Kontak</h2>
-                    <p className="subtle">Boleh kosong.</p>
-                    {resident && (
-                        <dl>
-                            <dt>NIK tersimpan</dt>
-                            <dd className="mono">
-                                {identityDetails?.national_id_number || 'Belum diisi'}
-                            </dd>
-                            <dt>Kontak tersimpan</dt>
-                            <dd className="mono">
-                                {identityDetails?.phone_number || 'Belum diisi'}
-                            </dd>
-                            <dt>Nomor KK keluarga</dt>
-                            <dd className="mono">
-                                {identityDetails?.family_card_number ||
-                                    'Belum diisi / belum dihubungkan'}
-                            </dd>
-                        </dl>
-                    )}
-                    <fieldset disabled={!canManage} className="form-grid">
-                        <div>
-                            <Field
-                                label="Kontak telepon (opsional)"
-                                error={form.errors.phone_number}
-                                hint={
-                                    resident
-                                        ? 'Isi untuk mengganti; kosong mempertahankan kontak tersimpan.'
-                                        : 'Nomor warga atau orang tua/wali yang dapat dihubungi.'
-                                }
-                            >
-                                <input
-                                    type="tel"
-                                    autoComplete="off"
-                                    maxLength={30}
-                                    disabled={form.data.clear_phone}
-                                    value={form.data.phone_number}
-                                    onChange={(e) => form.setData('phone_number', e.target.value)}
-                                />
-                            </Field>
-                            {resident && (
-                                <label className="checkbox-field">
-                                    <input
-                                        type="checkbox"
-                                        checked={form.data.clear_phone}
-                                        onChange={(e) =>
-                                            form.setData('clear_phone', e.target.checked)
-                                        }
-                                    />
-                                    Hapus kontak tersimpan
-                                </label>
-                            )}
-                        </div>
-                    </fieldset>
-                    <p className="helper-note">
-                        Nomor lengkap hanya terlihat bagi akun dengan izin khusus; akun lainnya
-                        melihat nomor tersamar.
-                    </p>
-                </section>
-                <section className="panel">
-                    <h2>02 · Alamat dan status kependudukan</h2>
+                    <h2>03 · Alamat dan status kependudukan</h2>
                     <fieldset disabled={!canManage} className="form-grid">
                         <Field label="Alamat" error={form.errors.address}>
                             <textarea
@@ -444,6 +506,65 @@ export default function Form({
                     <p className="helper-note">
                         Pilih “Diarsipkan” untuk menonaktifkan warga. Riwayat kunjungan dan laporan
                         terkunci tetap tersedia.
+                    </p>
+                </section>
+                <section className="panel">
+                    <h2>Kontak</h2>
+                    <p className="subtle">Boleh kosong.</p>
+                    {resident && (
+                        <dl>
+                            <dt>NIK tersimpan</dt>
+                            <dd className="mono">
+                                {identityDetails?.national_id_number || 'Belum diisi'}
+                            </dd>
+                            <dt>Kontak tersimpan</dt>
+                            <dd className="mono">
+                                {identityDetails?.phone_number || 'Belum diisi'}
+                            </dd>
+                            <dt>Nomor KK keluarga</dt>
+                            <dd className="mono">
+                                {identityDetails?.family_card_number ||
+                                    'Belum diisi / belum dihubungkan'}
+                            </dd>
+                        </dl>
+                    )}
+                    <fieldset disabled={!canManage} className="form-grid">
+                        <div>
+                            <Field
+                                label="Kontak telepon (opsional)"
+                                error={form.errors.phone_number}
+                                hint={
+                                    resident
+                                        ? 'Isi untuk mengganti; kosong mempertahankan kontak tersimpan.'
+                                        : 'Nomor warga atau orang tua/wali yang dapat dihubungi.'
+                                }
+                            >
+                                <input
+                                    type="tel"
+                                    autoComplete="off"
+                                    maxLength={30}
+                                    disabled={form.data.clear_phone}
+                                    value={form.data.phone_number}
+                                    onChange={(e) => form.setData('phone_number', e.target.value)}
+                                />
+                            </Field>
+                            {resident && (
+                                <label className="checkbox-field">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.data.clear_phone}
+                                        onChange={(e) =>
+                                            form.setData('clear_phone', e.target.checked)
+                                        }
+                                    />
+                                    Hapus kontak tersimpan
+                                </label>
+                            )}
+                        </div>
+                    </fieldset>
+                    <p className="helper-note">
+                        Nomor lengkap hanya terlihat bagi akun dengan izin khusus; akun lainnya
+                        melihat nomor tersamar.
                     </p>
                 </section>
                 {canManage && (

@@ -499,6 +499,10 @@ main#main {
     font-size: 12px;
     margin: 6px 0 12px;
 }
+/* Checkbox yang berdiri sendiri langsung di bawah judul panel (mis. Kepala Keluarga) */
+.panel > .checkbox-field {
+    margin: 14px 0 4px;
+}
 .status-badge {
     gap: 5px;
     background: var(--secondary);

@@ -1,7 +1,9 @@
 import { Link, router, useForm } from '@inertiajs/react';
+import { Search } from 'lucide-react';
 import { useState } from 'react';
 import Layout, { usePermission } from '../../components/Layout';
 import { Badge, Button, Empty, Errors, Field, Pagination } from '../../components/ui';
+import { Input } from '../../components/ui/input';
 import { useDraftGuard } from '../../components/useDraftGuard';
 import type { Pagination as PageData } from '../../types';
 
@@ -42,10 +44,10 @@ export default function Households({
     return (
         <Layout
             title="Keluarga"
-            description="Hubungkan anggota pada detail warga. Kunjungan rumah menghitung keluarga dan orang secara terpisah."
+            description="Keluarga baru dibuat otomatis saat mendaftarkan warga dengan centang “Kepala Keluarga” di form tambah warga. Di sini keluarga yang ada dapat diedit dan nomor KK-nya dikelola."
             action={<Link href="/masyarakat">Kembali ke masyarakat</Link>}
         >
-            {canManage && (
+            {canManage && editing && (
                 <form
                     className="panel form-stack"
                     onSubmit={(e) => {
@@ -64,11 +66,10 @@ export default function Households({
                                 setEditing(null);
                             },
                         };
-                        if (editing) form.put('/masyarakat/keluarga/' + editing, options);
-                        else form.post('/masyarakat/keluarga', options);
+                        form.put('/masyarakat/keluarga/' + editing, options);
                     }}
                 >
-                    <h2>{editing ? 'Edit keluarga' : 'Tambah keluarga'}</h2>
+                    <h2>Edit keluarga</h2>
                     <Errors errors={form.errors} />
                     <div className="form-grid">
                         <Field label="Nama kepala keluarga">
@@ -85,11 +86,7 @@ export default function Households({
                             <Field
                                 label="Nomor KK (opsional)"
                                 error={form.errors.family_card_number}
-                                hint={
-                                    editing
-                                        ? 'Isi untuk mengganti. Kosongkan untuk mempertahankan nomor tersimpan.'
-                                        : '16 digit jika tersedia; boleh kosong.'
-                                }
+                                hint="Isi untuk mengganti. Kosongkan untuk mempertahankan nomor tersimpan."
                             >
                                 <input
                                     type="text"
@@ -186,9 +183,16 @@ export default function Households({
                         router.get('/masyarakat/keluarga/daftar', { q });
                     }}
                 >
-                    <Field label="Cari kepala keluarga">
-                        <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={100} />
-                    </Field>
+                    <div className="search-input">
+                        <Search aria-hidden="true" />
+                        <Input
+                            aria-label="Cari kepala keluarga"
+                            placeholder="Cari kepala keluarga…"
+                            value={q}
+                            onChange={(e) => setQ(e.target.value)}
+                            maxLength={100}
+                        />
+                    </div>
                     <Button type="submit" variant="outline">
                         Cari keluarga
                     </Button>
