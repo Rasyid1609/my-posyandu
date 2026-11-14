@@ -34,7 +34,8 @@ export function findKecamatan(kodeProvinsi: string, kodeKota: string, kode: stri
 }
 
 /**
- * Kode wilayah NIK: 2 digit provinsi, 4 digit kab/kota, 6/7 digit kecamatan.
+ * Kode wilayah NIK: 2 digit provinsi, 4 digit kab/kota, 6 digit kecamatan
+ * (sebagian data lama memakai 7 digit BPS).
  * UI menampilkan dua digit kecamatan/kota, mis. "77 - Kota Madiun", "02 - Manguharjo".
  */
 export function wilayahLabel(kode: string, nama: string): string {

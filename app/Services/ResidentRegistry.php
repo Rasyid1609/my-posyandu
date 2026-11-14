@@ -17,6 +17,7 @@ class ResidentRegistry
     public function save(array $data, ?Resident $resident = null): Resident
     {
         return DB::transaction(function () use ($data, $resident) {
+            $reason = $data['reason'] ?? null;
             if ($resident) {
                 $resident = Resident::query()->lockForUpdate()->findOrFail($resident->id);
                 if ($resident->revision !== (int) $data['revision']) {
@@ -45,10 +46,10 @@ class ResidentRegistry
                 ]);
                 $this->identities->household($household, Arr::only($data, ['family_card_number']));
                 $household->save();
-                $this->audit->record('household.saved', $household, $data['reason']);
+                $this->audit->record('household.saved', $household, $reason);
                 $data['household_id'] = $household->id;
                 $data['guardian_id'] = null;
-                $data['family_relationship'] = $data['family_relationship'] ?: 'Kepala Keluarga';
+                $data['family_relationship'] = ($data['family_relationship'] ?? '') ?: 'Kepala Keluarga';
             }
             $previousStatus = $resident?->residency_status;
             $resident ??= new Resident(['registration_number' => 'PJ-'.Str::upper(Str::ulid())]);
@@ -91,7 +92,7 @@ class ResidentRegistry
                     'resident_id' => $resident->id,
                     'status' => $resident->residency_status,
                     'effective_date' => $data['effective_date'],
-                    'reason' => $data['reason'],
+                    'reason' => $reason ?? ($previousStatus === null ? 'Pendaftaran warga baru' : 'Perubahan status warga'),
                     'created_by' => auth()->id(),
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -100,7 +101,7 @@ class ResidentRegistry
             $this->audit->record(
                 $wasExisting ? 'resident.updated' : 'resident.created',
                 $resident,
-                $data['reason']
+                $reason
             );
 
             return $resident;

@@ -46,6 +46,10 @@ export default function SearchCombobox({
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [active, setActive] = useState(0);
+    // Menandai apakah user benar-benar mengubah teks sejak fokus terakhir.
+    // Tanpa ini, blur setelah memilih opsi akan mengirim teks kosong dan
+    // menghapus pilihan yang baru saja dibuat.
+    const [dirty, setDirty] = useState(false);
 
     const search = normalize(query);
     const matches = (option: SearchOption): boolean =>
@@ -60,26 +64,42 @@ export default function SearchCombobox({
     const showList = open && itemCount > 0;
     const highlight = Math.min(active, itemCount - 1);
 
+    const closeList = () => {
+        setOpen(false);
+        setQuery('');
+        setDirty(false);
+    };
+
     const openList = () => {
         if (disabled) return;
         setQuery(selectedLabel);
         setActive(0);
+        setDirty(false);
         setOpen(true);
     };
 
     const select = (selection: SearchSelection) => {
-        setOpen(false);
-        setQuery('');
+        closeList();
         onSelect(selection);
     };
 
     const commit = () => {
+        // Fokus lalu blur tanpa mengetik bukan perubahan: pertahankan pilihan.
+        if (!dirty) {
+            closeList();
+            return;
+        }
         const text = query.trim();
+        // Teks yang sama dengan pilihan aktif tidak perlu memicu perubahan,
+        // agar level wilayah di bawahnya tidak ikut tereset.
+        if (normalize(text) === normalize(selectedLabel)) {
+            closeList();
+            return;
+        }
         const matched = options.find(
             (option) => (option.searchText ?? option.label).toLowerCase() === normalize(text),
         );
-        setOpen(false);
-        setQuery('');
+        closeList();
         if (matched) {
             onSelect(matched);
         } else if (allowFreeText) {
@@ -107,8 +127,7 @@ export default function SearchCombobox({
             else if (canFreeText) select({ freeText: query.trim() });
         } else if (event.key === 'Escape') {
             event.preventDefault();
-            setOpen(false);
-            setQuery('');
+            closeList();
         }
     };
 
@@ -134,6 +153,7 @@ export default function SearchCombobox({
                     onChange={(e) => {
                         setQuery(e.target.value);
                         setActive(0);
+                        setDirty(true);
                         setOpen(true);
                     }}
                     onKeyDown={onKeyDown}

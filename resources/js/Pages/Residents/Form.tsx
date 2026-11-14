@@ -61,10 +61,12 @@ export default function Form({
         (person) =>
             person.id === resident?.guardian_id && person.household_id === resident?.household_id,
     );
+    const storedNik = identityDetails?.national_id_number || '';
+    const storedNikIsComplete = /^\d{16}$/.test(storedNik);
     const form = useForm({
         full_name: resident?.full_name || '',
         gender: resident?.gender || 'L',
-        national_id_number: '',
+        national_id_number: storedNikIsComplete ? storedNik : '',
         phone_number: '',
         clear_national_id: false,
         clear_phone: false,
@@ -136,7 +138,9 @@ export default function Form({
     // nomor KK keluarga terpilih (penuh bila berwenang, tersamar bila tidak).
     const selectedFamilyCard =
         households.find((family) => String(family.id) === form.data.household_id)
-            ?.family_card_display || '';
+            ?.family_card_display ||
+        identityDetails?.family_card_number ||
+        '';
     const familyCardValue = form.data.is_head_of_household
         ? formatNikDisplay(form.data.family_card_number)
         : /^\d{16}$/.test(selectedFamilyCard)
@@ -220,7 +224,13 @@ export default function Form({
                                 error={form.errors.national_id_number}
                                 hint={
                                     resident
-                                        ? 'Isi untuk mengganti. Kosongkan untuk mempertahankan nomor tersimpan.'
+                                        ? storedNikIsComplete
+                                            ? 'Isi untuk mengganti. Kosongkan untuk mempertahankan nomor tersimpan.'
+                                            : storedNik
+                                              ? 'NIK tersimpan: ' +
+                                                storedNik +
+                                                '. Isi 16 digit untuk mengganti.'
+                                              : 'Belum ada NIK tersimpan. Isi 16 digit jika tersedia.'
                                         : 'NIK bersifat opsional dan tidak menggantikan nomor registrasi.'
                                 }
                             >
@@ -230,6 +240,9 @@ export default function Form({
                                     autoComplete="off"
                                     className="mono"
                                     disabled={form.data.clear_national_id}
+                                    placeholder={
+                                        !storedNikIsComplete && storedNik ? storedNik : undefined
+                                    }
                                     value={formatNikDisplay(form.data.national_id_number)}
                                     onChange={(e) =>
                                         handleNikChange(
@@ -450,11 +463,15 @@ export default function Form({
                         <Field
                             label="Alasan pencatatan / perubahan"
                             error={form.errors.reason}
-                            hint="Wajib untuk jejak audit. Hindari menuliskan data kesehatan sensitif."
+                            hint={
+                                resident
+                                    ? 'Wajib untuk jejak audit perubahan. Hindari menuliskan data kesehatan sensitif.'
+                                    : 'Opsional saat pendaftaran baru. Hindari menuliskan data kesehatan sensitif.'
+                            }
                         >
                             <textarea
-                                required
-                                minLength={5}
+                                required={!!resident}
+                                minLength={resident ? 5 : undefined}
                                 maxLength={500}
                                 value={form.data.reason}
                                 onChange={(e) => form.setData('reason', e.target.value)}

@@ -59,7 +59,14 @@ class ResidentRequest extends FormRequest
                 'date_format:Y-m-d',
                 'before_or_equal:'.now('Asia/Jakarta')->toDateString(),
             ],
-            'reason' => ['required', 'string', 'min:5', 'max:500'],
+            // Alasan opsional saat pendaftaran baru, tetapi wajib saat mengubah
+            // data agar setiap perubahan memiliki jejak audit yang jelas.
+            'reason' => [
+                $this->route('resident') ? 'required' : 'nullable',
+                'string',
+                'min:5',
+                'max:500',
+            ],
             'revision' => [$this->route('resident') ? 'required' : 'nullable', 'integer', 'min:1'],
         ];
     }
