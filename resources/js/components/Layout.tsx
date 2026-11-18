@@ -4,6 +4,7 @@ import {
     ClipboardList,
     FileBarChart2,
     Leaf,
+    LayoutDashboard,
     LogOut,
     Menu,
     Moon,
@@ -68,6 +69,7 @@ export default function Layout({
         };
     }, [open]);
     const links = [
+        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/masyarakat', label: 'Data Masyarakat', icon: Users },
         { href: '/sasaran', label: 'Data Sasaran', icon: ClipboardList },
         { href: '/rekapitulasi', label: 'Data Rekapitulasi', icon: FileBarChart2 },
@@ -92,7 +94,7 @@ export default function Layout({
                 className={cn('sidebar', open && 'sidebar-open')}
                 aria-label="Navigasi utama"
             >
-                <Link className="brand" href="/masyarakat">
+                <Link className="brand" href="/dashboard">
                     <span className="brand-mark">
                         <Leaf size={24} />
                     </span>

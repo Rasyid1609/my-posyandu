@@ -5,6 +5,7 @@ use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ClinicalCalculationController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\HomeVisitController;
 use App\Http\Controllers\ImportController;
@@ -25,6 +26,7 @@ Route::middleware('guest')->group(function () {
         ->name('login.store');
 });
 Route::middleware(['auth', 'active'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
     Route::resource('masyarakat', ResidentController::class)->parameters(['masyarakat' => 'resident'])
         ->only(['index', 'create', 'store', 'edit', 'update'])->names([

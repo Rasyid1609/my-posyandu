@@ -65,13 +65,19 @@ class PeriodController extends Controller
     {
         Gate::authorize('residents.view');
         abort_unless($request->user()->can('targets.manage') || $request->user()->can('visits.view'), 403);
-        $search = $request->validate(['q' => ['nullable', 'string', 'max:100']])['q'] ?? '';
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'target' => ['nullable', 'integer', Rule::exists('target_memberships', 'id')->where('reporting_period_id', $period->id)],
+        ]);
+        $search = $filters['q'] ?? '';
 
         return Inertia::render('Targets/Show', [
             'period' => $period,
             'activities' => $period->activities()->orderBy('scheduled_on')->orderBy('id')->get(),
             'targets' => $period->targets()->with('resident:id,full_name,registration_number')
+                ->when($filters['target'] ?? null, fn ($query, $target) => $query->whereKey($target))
                 ->withCount('visits')->orderBy('id')->paginate(15)->withQueryString(),
+            'targetFilter' => isset($filters['target']) ? (int) $filters['target'] : null,
             'candidates' => $request->user()->can('targets.manage') ? Resident::query()
                 ->where('residency_status', 'active')->whereRaw('LOWER(full_name) LIKE ?', ['%'.mb_strtolower($search).'%'])
                 ->orderBy('full_name')->orderBy('id')->limit(30)->get(['id', 'full_name', 'registration_number']) : [],

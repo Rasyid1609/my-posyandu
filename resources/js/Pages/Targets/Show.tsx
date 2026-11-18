@@ -164,12 +164,14 @@ export default function Show({
     candidates,
     search,
     activities,
+    targetFilter,
 }: {
     period: Period;
     targets: PageData<Target>;
     candidates: Resident[];
     search: string;
     activities: Activity[];
+    targetFilter: number | null;
 }) {
     const canManage = usePermission('targets.manage');
     const generate = useForm({ revision: period.revision });
@@ -282,6 +284,12 @@ export default function Show({
             <Activities period={period} activities={activities} />
             <section className="panel">
                 <h2>Daftar sasaran & kehadiran</h2>
+                {targetFilter && (
+                    <p className="subtle">
+                        Menampilkan warga yang dipilih dari dashboard.{' '}
+                        <Link href={'/sasaran/' + period.id}>Tampilkan semua sasaran</Link>
+                    </p>
+                )}
                 {targets.data.length ? (
                     <div className="table-scroll" tabIndex={0}>
                         <table>
